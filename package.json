@@ -1,0 +1,43 @@
+{
+  "name": "introspect-strream",
+  "version": "0.1.0",
+  "description": "A small library to provide reactive streams",
+  "author": "subtenante@gmail.com",
+  "license": "GPL",
+  "keywords": [
+    "javascript",
+    "stream",
+    "reactive",
+    "es6"
+  ],
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/subtenante/introspect-stream.git"
+  },
+  "devDependencies": {
+    "chai": "1.9.x",
+    "chai-string": "^1.1.1",
+    "del": "0.1.x",
+    "gulp": "3.x.x",
+    "gulp-concat": "^2.5.2",
+    "gulp-header": "^1.2.2",
+    "gulp-jshint": "1.8.x",
+    "gulp-mocha": "1.1.x",
+    "gulp-mox": "0.0.4",
+    "gulp-replace": "^0.5.3",
+    "gulp-sourcemaps": "1.2.x",
+    "gulp-traceur": "0.x.x",
+    "jshint-stylish": "1.x.x",
+    "marked-toc": "^0.2.8",
+    "mocha": "1.x.x"
+  },
+  "dependencies": {
+    "chalk": "^1.0.0",
+    "introspect-typed": "^0.3.1",
+    "lodash": "3.7.0"
+  }
+}
