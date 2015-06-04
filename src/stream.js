@@ -174,11 +174,11 @@ export var stream = overload(opts => new Observable(opts))
 //   .filter(function (x, y) { return (y % 2 === 0); }).logAs('filtered')
 //     .branch(f => f.map((x, y) => x).logAs('evenX'))
 //     .branch(f => f.map((x, y) => y).logAs('oddY'));
-
-var fibo = stream({
-  name: 'fibo',
-  init: [0,1],
-  reduce: acc => [acc[1], acc[0] + acc[1]],
-  extract: state => state[0],
-  complete: function () { return this._state[0] === Infinity; }
-}).log().run();
+//
+// var fibo = stream({
+//   name: 'fibo',
+//   init: [0,1],
+//   reduce: acc => [acc[1], acc[0] + acc[1]],
+//   extract: state => state[0],
+//   complete: function () { return this._state[0] === Infinity; }
+// }).log().run();

@@ -9,7 +9,7 @@ export var Values = function (args) {
 
 Values.prototype = {
   toString: repr('args'),
-  applyTo: function (fn, ctx) { fn.apply(ctx, this.args); },
+  applyTo: function (fn, ctx) { fn.apply(ctx, this.args.concat([Values])); },
   push: function (x) { this.args.push(x); return this; }
 };
 
