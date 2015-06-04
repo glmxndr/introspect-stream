@@ -1,6 +1,6 @@
 'use strict';
 
-import Values from './values';
+import { Values } from './values';
 
 export var Emitter = function () {
   this._events = {};
@@ -19,11 +19,10 @@ Emitter.prototype = {
     else { this._events[type].clear(); }
   },
 
-  emit: function (type, values) {
+  emit: function (type, ...args) {
     if (!this._events[type]) { return; }
     for (let fn of this._events[type].values()) {
-      fn.call(this, values);
-      //Values.apply(fn, this, values);
+      Values.apply(fn, this, ...args);
     }
   }
 };

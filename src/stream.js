@@ -4,15 +4,16 @@ import _ from 'lodash';
 import { overload } from 'introspect-typed';
 import { Emitter } from './events';
 import { Priority } from './priority';
+import { Values as vals } from './values';
 import { uuid, safe, extend, print, repr } from './utils';
 
-const NEXT = {NEXT: true, toString: () => 'NXT'};
+const NEXT = {NEXT: true, toString: () => 'NEXT'};
 const END = {END: true, toString: () => 'END'};
 
 const LAST_ENDED = function () { if (this._sources.length === 0) { this.end(); } };
 const ANY_ENDED = function () { this.end(); };
 
-const OVERRIDABLE = ['name', 'accept', 'reduce', 'ready', 'extract'];
+const OVERRIDABLE = ['name', 'accept', 'reduce', 'ready', 'extract', 'complete'];
 
 var Observable = function (opts = {}) {
   Emitter.call(this);
@@ -26,7 +27,7 @@ var Observable = function (opts = {}) {
   if (opts.sources) {
     this._endingStrategy = (opts.endWhen === 'all') ? LAST_ENDED : ANY_ENDED;
     this._sources = opts.sources;
-    this.plugTo(...this._sources);
+    this._plugTo(...this._sources);
   }
 
 };
@@ -35,9 +36,10 @@ Observable.prototype = _.extend(Emitter.prototype, {
 
   /*@override*/
   _accept: () => true,
-  _reduce: (current, x) => x,
+  _reduce: (current, ...x) => vals(x),
   _extract: x => x,
   _ready: () => true,
+  _complete: () => false,
   /*@override*/
 
   _later: function (fn) { this._priority.push(fn); },
@@ -46,18 +48,14 @@ Observable.prototype = _.extend(Emitter.prototype, {
     this._sources = _(this._sources).without(pub).value();
     this._endingStrategy();
   },
-
-  name: function (n) { return n ? (this._name = n, this) : this._name; },
-  toString: function () { return `${this.id} ${this._name || 'anon'}`; },
-
-  plugTo: function (...pubs) {
-    pubs.forEach(pub => pub.plug(this));
+  _plugTo: function (...pubs) {
+    pubs.forEach(pub => pub._plug(this));
     return this;
   },
-  plug: function (...subs) {
+  _plug: function (...subs) {
     if (this.ended()) { return this; }
     subs.forEach(sub => {
-      var onNext = v => sub.next(v);
+      var onNext = (...v) => sub.next(...v);
       var onEnd = () => sub._unplug(this);
       this.on(NEXT, onNext); this.on(END, onEnd);
       sub.on(END, () => {
@@ -66,58 +64,96 @@ Observable.prototype = _.extend(Emitter.prototype, {
     });
     return this;
   },
-  consume: function (...fns) {
-    if (this.ended()) { return this; }
-    fns.forEach(fn => this.on(NEXT, safe(fn)));
-    return this;
-  },
 
+  name: function (n) { return n ? (this._name = n, this) : this._name; },
   state: function () { return this._state; },
-  ended: function () { return this._state === END; },
-  next: function (x) {
+  toString: function () { return `${this.id} ${this._name || 'anon'}`; },
+
+  next: function (...x) {
+    var v = vals.flatten(...x);
     if (this.ended()) { return; }
-    if (arguments.length === 0) { return this._state; }
     this._later(() => {
-      if (!this._accept(x)) { return this; }
-      this._state = this._reduce(this._state, x);
-      if (this._ready()) { 
-        this.emit(NEXT, this._extract(this._state));
+      if (!this._accept(...v.args)) { return this; }
+      this._state = this._reduce(this._state, ...v.args);
+      if (this._ready()) {
+        this._last = this._extract(this._state);
+        this.emit(NEXT, this._last);
       }
+      if (this._complete()) { this.end(); }
     });
     return this;
   },
+  last: function () { return this._last; },
   end: function () {
     if (this.ended()) { return; }
-    this._later(() => this._state = END, this.emit(END));
+    this._state = END;
+    this._later(() => this.emit(END));
+    return this;
+  },
+  ended: function () { return this._state === END; },
+
+  consume: function (...fns) {
+    if (this.ended()) { return this; }
+    fns.forEach(fn => this.on(NEXT, safe(fn, this)));
     return this;
   },
 
   log: function () {
-    this.on(NEXT, x => print(this, `~( ${x}`));
+    this.on(NEXT, (...x) => print(this, `~( ${x}`));
     this.on(END, () => print(this, `~# END`));
     return this;
   },
   logAs: function (n) { return this.name(n).log(); },
+
+  schedule: function (fn) {
+    this._priority.push(fn);
+    return this;
+  },
+  scheduleWhile: function (fn) {
+    this._priority.loop(fn);
+    return this;
+  },
+  run: function () {
+    this.scheduleWhile(() => (this.next(), !this.ended()));
+  },
+
+  branch: function (fn) {
+    fn(this);
+    return this;
+  },
 
   combine: function (opts, ...others) {
     opts.parent = opts.parent || this;
     opts.sources = opts.sources || [this].concat(others);
     return new Observable(opts);
   },
-  map: function (fn) { return this.combine({ reduce: (c,x) => fn(x) }); },
-  reduce: function (fn, init) { return this.combine({ reduce: fn, init }); },
-  filter: function (pred) { return this.combine({ accept: pred }); },
-  merge: function (...os) { return this.combine({endWhen: 'all'}, ...os); },
+
+  map: function (fn) {
+    return this.combine({ reduce: (c,...x) => fn(...x) });
+  },
+
+  reduce: function (fn, init) {
+    return this.combine({ reduce: fn, init });
+  },
+
+  filter: function (pred) {
+    return this.combine({ accept: pred });
+  },
+
+  merge: function (...os) {
+    return this.combine({endWhen: 'all'}, ...os);
+  },
+
   zip: function (...os) {
     os.unshift(this);
-    var srcs = os.map(o => o.map(x => ({id: o.id, value: x})));
+    var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
     var ids = _.pluck(os, 'id');
     var qs = {}; // queues
     os.forEach(s => { qs[s.id] = []; });
     var ready = () => (ids.every(id => qs[id].length > 0));
     var reduce = (_, msg) => (qs[msg.id].push(msg.value), qs);
-    var extract = () => ids.reduce((r, id) => (r.push(qs[id].shift()), r), []);
-    var opts = {ready, reduce, extract, init: qs, sources: srcs, parent: this};
+    var extract = () => ids.reduce( (v, id) => v.push(qs[id].shift()), vals() );
+    var opts = {ready, reduce, extract, init: qs, sources , parent: this};
     return this.combine(opts);
   }
 });
@@ -133,14 +169,16 @@ export var stream = overload(opts => new Observable(opts))
     return t;
   });
 
-var nums = stream([1, 2, 3, 4, 5, 6]).logAs('nums');
-var simple100 = nums.map(x => x + 100)//.logAs('100s');
+// var couples = stream('nums', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).log()
+//   .map(n => vals([n, n*n+1])).logAs('couples')
+//   .filter(function (x, y) { return (y % 2 === 0); }).logAs('filtered')
+//     .branch(f => f.map((x, y) => x).logAs('evenX'))
+//     .branch(f => f.map((x, y) => y).logAs('oddY'));
 
-var chars = stream(['a','b','c','d','e']).logAs('chars');
-var charnum = chars.zip(nums).logAs('charnum');
-charnum.map(x => x[0] + x[1]).logAs('concat')
-
-nums
-  .merge(simple100, chars)//.logAs('merged')
-  .map(x => x + x)//.logAs('double')
-;
+var fibo = stream({
+  name: 'fibo',
+  init: [0,1],
+  reduce: acc => [acc[1], acc[0] + acc[1]],
+  extract: state => state[0],
+  complete: function () { return this._state[0] === Infinity; }
+}).log().run();

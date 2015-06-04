@@ -10,14 +10,16 @@ export var mixin = (...constrs) => (...objs) => {
   return _.extend({}, proto, ...objs);
 };
 
-export var later = fn => setTimeout(fn, 0);
+export var later = fn => setImmediate(fn);
 
-export var safe = fn => x => {
-  try { fn(x); }
-  catch(e) {
-    console.error(chalk.red(`ERROR '${e}' in \n${fn}`));
-    console.trace();
-  }
+export var safe = function (fn, ctx) {
+  return function (...args) {
+    try { fn.apply(ctx, args); }
+    catch(e) {
+      console.error(chalk.red(`ERROR '${e}' in \n${fn}`));
+      console.trace();
+    }
+  };
 };
 
 export var pad = function (o, num = 15) {
