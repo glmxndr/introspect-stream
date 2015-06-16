@@ -10,7 +10,7 @@ export var mixin = (...constrs) => (...objs) => {
   return _.extend({}, proto, ...objs);
 };
 
-export var later = fn => setImmediate(fn);
+export var later = (process && process.nextTick) || setImmediate || setTimeout;
 
 export var safe = function (fn, ctx) {
   return function (...args) {

@@ -6,15 +6,15 @@ export var Priority = function (parent) {
   this.parent = parent;
   this.rank = parent ? (parent.rank + 1) : 0;
   this.queue = [];
-  this._next = null;
+  this._child = null;
 };
 
 Priority.prototype = {
-  hasNext: function () { return !!this._next; },
-  next: function () {
-    if (this._next) { return this._next; }
-    this._next = new Priority(this);
-    return this._next;
+  hasChild: function () { return !!this._child; },
+  child: function () {
+    if (this._child) { return this._child; }
+    this._child = new Priority(this);
+    return this._child;
   },
   push: function (fn) {
     this.queue.push(fn);
@@ -26,7 +26,7 @@ Priority.prototype = {
     this.push(rec);
   },
   toString: function () {
-    return `${this.queue.length}${this._next ? (',' + this._next.toString()) : ''}`;
+    return `${this.queue.length}${this._child ? (',' + this._child.toString()) : ''}`;
   }
 };
 
@@ -34,7 +34,7 @@ Priority.root = new Priority();
 
 Priority.nextTick = function () {
   var last = Priority.root;
-  while (last.hasNext()) { last = last.next(); }
+  while (last.hasChild()) { last = last.child(); }
   while (last.parent && last.queue.length === 0) {
     last = last.parent;
   }

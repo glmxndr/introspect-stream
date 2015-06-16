@@ -1,7 +1,7 @@
 'use strict';
 
 import _ from 'lodash';
-import { overload } from 'introspect-typed';
+import { Matcher, overload } from 'introspect-typed';
 import { Emitter } from './events';
 import { Priority } from './priority';
 import { Values as vals } from './values';
@@ -20,7 +20,7 @@ var Observable = function (opts = {}) {
   this.id = uuid('Obs');
   OVERRIDABLE.forEach(p => {  if (opts[p]) { this['_' + p] = opts[p]; } });
 
-  if (opts.parent) { this._priority = opts.parent._priority.next(); }
+  if (opts.parent) { this._priority = opts.parent._priority.child(); }
   else { this._priority = Priority.root; }
 
   this._state = opts.init || null;
@@ -69,16 +69,17 @@ Observable.prototype = _.extend(Emitter.prototype, {
   state: function () { return this._state; },
   toString: function () { return `${this.id} ${this._name || 'anon'}`; },
 
+  broadcast: function () {
+    this._last = this._extract(this._state);
+    this.emit(NEXT, this._last);
+  },
   next: function (...x) {
     var v = vals.flatten(...x);
     if (this.ended()) { return; }
     this._later(() => {
       if (!this._accept(...v.args)) { return this; }
       this._state = this._reduce(this._state, ...v.args);
-      if (this._ready()) {
-        this._last = this._extract(this._state);
-        this.emit(NEXT, this._last);
-      }
+      if (this._ready()) { this.broadcast(); }
       if (this._complete()) { this.end(); }
     });
     return this;
@@ -92,30 +93,28 @@ Observable.prototype = _.extend(Emitter.prototype, {
   },
   ended: function () { return this._state === END; },
 
-  consume: function (...fns) {
+  onNext: function (...fns) {
     if (this.ended()) { return this; }
     fns.forEach(fn => this.on(NEXT, safe(fn, this)));
     return this;
   },
+  onEnd: function (...fns) {
+    if (this.ended()) {
+      fns.forEach(fn => safe(fn, this)());
+      return this;
+    }
+    fns.forEach(fn => this.on(END, safe(fn, this)));
+    return this;
+  },
 
   log: function () {
-    this.on(NEXT, (...x) => print(this, `~( ${x}`));
+    this.on(NEXT, (...x) => { x.pop(); print(this, `~( ${x}`); });
     this.on(END, () => print(this, `~# END`));
     return this;
   },
   logAs: function (n) { return this.name(n).log(); },
 
-  schedule: function (fn) {
-    this._priority.push(fn);
-    return this;
-  },
-  scheduleWhile: function (fn) {
-    this._priority.loop(fn);
-    return this;
-  },
-  run: function () {
-    this.scheduleWhile(() => (this.next(), !this.ended()));
-  },
+  scheduler: function (fn) { return this._priority; },
 
   branch: function (fn) {
     fn(this);
@@ -132,7 +131,7 @@ Observable.prototype = _.extend(Emitter.prototype, {
     return this.combine({ reduce: (c,...x) => fn(...x) });
   },
 
-  reduce: function (fn, init) {
+  scan: function (fn, init) {
     return this.combine({ reduce: fn, init });
   },
 
@@ -155,30 +154,41 @@ Observable.prototype = _.extend(Emitter.prototype, {
     var extract = () => ids.reduce( (v, id) => v.push(qs[id].shift()), vals() );
     var opts = {ready, reduce, extract, init: qs, sources , parent: this};
     return this.combine(opts);
+  },
+
+  buffer: function (n) {
+    var result = new Observable({
+      init: [],
+      reduce: function (acc, x) { acc.push(x); return acc; },
+      extract: function () { let x = this._state; this._state = []; return x; },
+      ready: function () { return this._state.length >= n; }
+    });
+    this.onNext(x => { result.next(x); });
+    this.onEnd(() => { result.broadcast(); result.end(); });
+    return result;
   }
 });
 
-export var stream = overload(opts => new Observable(opts))
-  .when('named', [String], (name, o) => o.default({name}))
-  .when('values', [Array], (values, o) => o.namedValues('anon', values))
-  .when('namedValues', [String, Array], (name, values, o) => {
-    var t = o.default({name});
-    var nextVal = () => (values.length ? (t.next(values.shift()), true)
-                      : (t.end(), false));
-    t._priority.loop(nextVal);
-    return t;
-  });
+var Iterable = Matcher(v => !!v[Symbol.iterator]);
 
-// var couples = stream('nums', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).log()
-//   .map(n => vals([n, n*n+1])).logAs('couples')
-//   .filter(function (x, y) { return (y % 2 === 0); }).logAs('filtered')
-//     .branch(f => f.map((x, y) => x).logAs('evenX'))
-//     .branch(f => f.map((x, y) => y).logAs('oddY'));
-//
-// var fibo = stream({
-//   name: 'fibo',
-//   init: [0,1],
-//   reduce: acc => [acc[1], acc[0] + acc[1]],
-//   extract: state => state[0],
-//   complete: function () { return this._state[0] === Infinity; }
-// }).log().run();
+export var stream = overload(opts => new Observable(opts))
+  .when('named',
+    [String],
+    (name,  o) => o.default({name}))
+  .when('values',
+    [Iterable],
+    (iterable, o) => o.namedValues('anon', iterable))
+  .when('namedValues',
+    [String, Iterable],
+    (name,   iterable, o) => {
+      var t = o.default({name});
+      var current = {};
+      var iter = iterable[Symbol.iterator]();
+      var nextVal = () => {
+        let {done, value} = iter.next();
+        if (done) { t.end(); return false; }
+        t.next(value); return true;
+      };
+      t.scheduler().loop(nextVal);
+      return t;
+    });

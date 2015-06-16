@@ -4,7 +4,6 @@
 var _ = require('lodash');
 var chai = require('chai');
 chai.use(require('chai-string'));
-var expectAsync = require('./utils').expectAsync;
 var expect = chai.expect;
 
 var Emitter = require('../lib/node/events').Emitter;

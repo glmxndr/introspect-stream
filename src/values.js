@@ -5,11 +5,17 @@ export var Values = function (args) {
   if (!(this instanceof Values)) { return new Values(args); }
   this.id = uuid('Values');
   this.args = args ? [].slice.call(args) : [];
+  
+  // Remove the additional Values pointer appended
+  // to the list of params when calling applyTo
+  if (this.args[this.args.length - 1] === Values) { this.args.pop(); }
 };
 
 Values.prototype = {
   toString: repr('args'),
-  applyTo: function (fn, ctx) { return fn.apply(ctx, this.args.concat([Values])); },
+  applyTo: function (fn, ctx) {
+    return fn.apply(ctx, this.args.concat([Values]));
+  },
   push: function (x) { this.args.push(x); return this; }
 };
 
