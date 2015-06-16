@@ -8,7 +8,6 @@ var expect = chai.expect;
 
 var lib = require('../lib/node/stream');
 var stream = lib.stream;
-var Observable = lib.Observable;
 
 var expectAsync = function (test) {
   return function (done, time) {
@@ -72,6 +71,34 @@ describe('Observale', function () {
         .onNext(function(x) { sink.push(x); })
         .onEnd(function () {
           expect(sink).to.deep.equal([1,'a',2,'b',3,false,true]);
+          done();
+        });
+    });
+  });
+
+  describe('.combineLatest', function () {
+    it ('provides a new stream with combined latest values', function (done) {
+      var sink = [];
+      var nums = stream([1,2,3,4,5]);
+      var chars = stream(['a', 'b', 'c', 'd']);
+      var bools = stream([false, true]);
+      var comblatested = nums.combineLatest(chars, bools);
+      comblatested
+        .onNext(function(n,c,b) { sink.push([n,c,b]); })
+        .onEnd(function () {
+          expect(sink).to.deep.equal([
+            [1, undefined, undefined],
+            [1, 'a', undefined],
+            [1, 'a', false],
+            [2, 'a', false],
+            [2, 'b', false],
+            [2, 'b', true],
+            [3, 'b', true],
+            [3, 'c', true],
+            [4, 'c', true],
+            [4, 'd', true],
+            [5, 'd', true]
+          ]);
           done();
         });
     });

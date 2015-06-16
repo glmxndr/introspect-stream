@@ -37,15 +37,31 @@
 [0]: #
 [1]: #declarations
 ### `Methods`
-* [`_later`][0]
+* [`Apparatus`][0]
+* [`_later`][1]
 
 ### `Declarations`
 
 ### `Methods`
 
+#### `Apparatus`
+
+[\#][0] | [Ⓣ][2]
+
+
+
+##### Arguments
+1. `opts` (*Object*) - the parameters of the apparatus: overriden methods                          declared in the OVERRIDABLE array, the sources of
+                           input (other apparati), the optional parent apparatus
+                           (used for scheduling/priorisation), the initial state.
+
+---
+
+
+
 #### `_later`
 
-[\#][0] | [Ⓣ][1]
+[\#][1] | [Ⓣ][2]
 
 
 
@@ -55,19 +71,38 @@
 
 ### `Declarations`
 
-#### _accept
+#### 
 
-[\#][2] | [Ⓣ][3]
+[\#][3] | [Ⓣ][4]
 
 
+
+##### Types
+
+
+Apparatus overridable properties.
 
 ---
 
 
-[0]: #_later
-[1]: #methods
-[2]: #_accept
-[3]: #declarations
+
+#### _accept
+
+[\#][5] | [Ⓣ][4]
+
+
+
+Default overridable behavior components
+
+---
+
+
+[0]: #apparatus
+[1]: #_later
+[2]: #methods
+[3]: #
+[4]: #declarations
+[5]: #_accept
 ### `Methods`
 
 ### `Declarations`

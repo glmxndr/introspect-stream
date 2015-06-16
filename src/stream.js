@@ -1,7 +1,7 @@
 'use strict';
 
 import _ from 'lodash';
-import { Matcher, overload } from 'introspect-typed';
+import { Iterable, overload } from 'introspect-typed';
 import { Emitter } from './events';
 import { Priority } from './priority';
 import { Values as vals } from './values';
@@ -13,9 +13,26 @@ const END = {END: true, toString: () => 'END'};
 const LAST_ENDED = function () { if (this._sources.length === 0) { this.end(); } };
 const ANY_ENDED = function () { this.end(); };
 
-const OVERRIDABLE = ['name', 'accept', 'reduce', 'ready', 'extract', 'complete'];
+/**
+ * Apparatus overridable properties.
+ * @type {Array}
+ */
+const OVERRIDABLE = ['name', 'accept', 'reduce', 'ready', 'extract', 'complete', 'beforeEnd'];
 
-var Observable = function (opts = {}) {
+/**
+ * An apparatus receives input, processes it and generates output.
+ * The received input provokes asynchronous behavior, changing the state
+ * of the apparatus. If the conditions are right, the apparatus may
+ * signal out its output (also asynchronously).
+ *
+ * @method  Apparatus
+ * @param   {Object}  opts  the parameters of the apparatus: overriden methods
+ *                          declared in the OVERRIDABLE array, the sources of
+ *                          input (other apparati), the optional parent apparatus
+ *                          (used for scheduling/priorisation), the initial state.
+ * @example
+ */
+var Apparatus = function (opts = {}) {
   Emitter.call(this);
   this.id = uuid('Obs');
   OVERRIDABLE.forEach(p => {  if (opts[p]) { this['_' + p] = opts[p]; } });
@@ -32,15 +49,16 @@ var Observable = function (opts = {}) {
 
 };
 
-Observable.prototype = _.extend(Emitter.prototype, {
+Apparatus.prototype = _.extend(Emitter.prototype, {
 
-  /*@override*/
+  /*Default overridable behavior components*/
   _accept: () => true,
   _reduce: (current, ...x) => vals(x),
   _extract: x => x,
   _ready: () => true,
   _complete: () => false,
-  /*@override*/
+  _beforeEnd: () => {},
+  /**/
 
   _later: function (fn) { this._priority.push(fn); },
 
@@ -79,14 +97,15 @@ Observable.prototype = _.extend(Emitter.prototype, {
     this._later(() => {
       if (!this._accept(...v.args)) { return this; }
       this._state = this._reduce(this._state, ...v.args);
-      if (this._ready()) { this.broadcast(); }
-      if (this._complete()) { this.end(); }
+      if (this._ready(this._state)) { this.broadcast(); }
+      if (this._complete(this._state)) { this.end(); }
     });
     return this;
   },
   last: function () { return this._last; },
   end: function () {
     if (this.ended()) { return; }
+    this._beforeEnd(this._state);
     this._state = END;
     this._later(() => this.emit(END));
     return this;
@@ -124,7 +143,7 @@ Observable.prototype = _.extend(Emitter.prototype, {
   combine: function (opts, ...others) {
     opts.parent = opts.parent || this;
     opts.sources = opts.sources || [this].concat(others);
-    return new Observable(opts);
+    return new Apparatus(opts);
   },
 
   map: function (fn) {
@@ -143,45 +162,63 @@ Observable.prototype = _.extend(Emitter.prototype, {
     return this.combine({endWhen: 'all'}, ...os);
   },
 
-  zip: function (...os) {
-    os.unshift(this);
+  combineLatest: function (...os) {
+    os = [this].concat(os);
     var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
     var ids = _.pluck(os, 'id');
-    var qs = {}; // queues
-    os.forEach(s => { qs[s.id] = []; });
-    var ready = () => (ids.every(id => qs[id].length > 0));
-    var reduce = (_, msg) => (qs[msg.id].push(msg.value), qs);
-    var extract = () => ids.reduce( (v, id) => v.push(qs[id].shift()), vals() );
-    var opts = {ready, reduce, extract, init: qs, sources , parent: this};
-    return this.combine(opts);
+    var state = {};
+    return this.combine({
+      endWhen: 'all',
+      init: state,
+      reduce: (state, msg) => (state[msg.id] = msg.value, state),
+      extract: () => ids.reduce( (v, id) => v.push(state[id]), vals() ),
+      parent: this,
+      sources
+    });
+  },
+
+  zip: function (...os) {
+    os = [this].concat(os);
+    var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
+    var ids = _.pluck(os, 'id');
+    var qs = _(os).map(s => [s.id, []]).zipObject().value(); // queues
+    return this.combine({
+      init: qs,
+      ready: () => (ids.every(id => qs[id].length > 0)),
+      reduce: (_, msg) => (qs[msg.id].push(msg.value), qs),
+      extract: () => ids.reduce( (v, id) => v.push(qs[id].shift()), vals() ),
+      parent: this,
+      sources
+    });
+  },
+
+  bufferWhile: function (pred) {
+    return this.combine({
+      init: [],
+      reduce: function (state, x) { state.push(x); return state; },
+      extract: function (state) { this._state = []; return state; },
+      ready: function (state) { return pred(state); },
+      beforeEnd: function () { this.broadcast(); }
+    });
   },
 
   buffer: function (n) {
-    var result = new Observable({
-      init: [],
-      reduce: function (acc, x) { acc.push(x); return acc; },
-      extract: function () { let x = this._state; this._state = []; return x; },
-      ready: function () { return this._state.length >= n; }
-    });
-    this.onNext(x => { result.next(x); });
-    this.onEnd(() => { result.broadcast(); result.end(); });
-    return result;
-  }
+    return this.bufferWhile(state => state.length >= n);
+  },
+
 });
 
-var Iterable = Matcher(v => !!v[Symbol.iterator]);
-
-export var stream = overload(opts => new Observable(opts))
+export var stream = overload(opts => new Apparatus(opts))
   .when('named',
     [String],
-    (name,  o) => o.default({name}))
+    (name) => stream.default({name}))
   .when('values',
     [Iterable],
-    (iterable, o) => o.namedValues('anon', iterable))
+    (iterable) => stream.namedValues('anon', iterable))
   .when('namedValues',
     [String, Iterable],
-    (name,   iterable, o) => {
-      var t = o.default({name});
+    (name,   iterable) => {
+      var t = stream.default({name});
       var current = {};
       var iter = iterable[Symbol.iterator]();
       var nextVal = () => {

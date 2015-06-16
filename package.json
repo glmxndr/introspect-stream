@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "chalk": "^1.0.0",
-    "introspect-typed": "^0.3.1",
+    "introspect-typed": "^1.0.0",
     "lodash": "3.7.0"
   }
 }
