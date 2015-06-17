@@ -5,7 +5,7 @@ export var Values = function (args) {
   if (!(this instanceof Values)) { return new Values(args); }
   this.id = uuid('Values');
   this.args = args ? [].slice.call(args) : [];
-  
+
   // Remove the additional Values pointer appended
   // to the list of params when calling applyTo
   if (this.args[this.args.length - 1] === Values) { this.args.pop(); }
@@ -16,7 +16,13 @@ Values.prototype = {
   applyTo: function (fn, ctx) {
     return fn.apply(ctx, this.args.concat([Values]));
   },
-  push: function (x) { this.args.push(x); return this; }
+  push: function (...xs) {
+    xs.forEach(x => {
+      if (x instanceof Values) { this.args = this.args.concat(x.args); }
+      else { this.args.push(x); }
+    });
+    return this;
+  }
 };
 
 Values.flatten = function (...args) {

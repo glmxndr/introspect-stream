@@ -13,25 +13,8 @@ const END = {END: true, toString: () => 'END'};
 const LAST_ENDED = function () { if (this._sources.length === 0) { this.end(); } };
 const ANY_ENDED = function () { this.end(); };
 
-/**
- * Apparatus overridable properties.
- * @type {Array}
- */
 const OVERRIDABLE = ['name', 'accept', 'reduce', 'ready', 'extract', 'complete', 'beforeEnd'];
 
-/**
- * An apparatus receives input, processes it and generates output.
- * The received input provokes asynchronous behavior, changing the state
- * of the apparatus. If the conditions are right, the apparatus may
- * signal out its output (also asynchronously).
- *
- * @class Apparatus
- * @constructor
- * @category Stream
- * @param {Object} opts the parameters of the apparatus: overriden methods
- *   declared in the OVERRIDABLE array, the sources of input (other apparati),
- *   the optional parent apparatus (used for scheduling/priorisation), the initial state.
- */
 var Apparatus = function (opts = {}) {
   Emitter.call(this);
   this.id = uuid('Obs');
@@ -187,7 +170,7 @@ plugin('combineLatest', function (...os) {
 
 plugin('zip', function (...os) {
   os = [this].concat(os);
-  var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
+  var sources = os.map(o => o.map((...x) => ({id: o.id, value: vals(x)})));
   var ids = _.pluck(os, 'id');
   var qs = _(os).map(s => [s.id, []]).zipObject().value(); // queues
   return this.combine({
