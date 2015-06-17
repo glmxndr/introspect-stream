@@ -12,20 +12,10 @@ var header = require('gulp-header');
 var concat = require('gulp-concat');
 var jshint = require('gulp-jshint');
 var replace = require('gulp-replace');
-var mox = require('gulp-mox');
 var stylish = require('jshint-stylish');
-var toc = require('marked-toc');
+var toc = require('markdown-toc');
 
-gulp.task('api', function () {
-  return gulp.src(['src/**/*.js'])
-      .pipe(mox())
-      .pipe(replace(/^#/mg, '##'))
-      .pipe(concat('API.md'))
-      .pipe(header(''))
-      .pipe(gulp.dest('./'));
-});
-
-gulp.task('readme:toc', ['api'], function (cb) {
+gulp.task('readme:toc', function (cb) {
   var file = fs.readFileSync('README.md', 'utf8');
   // Generate a TOC
   var toced = toc.insert(file);

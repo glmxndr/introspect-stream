@@ -27,12 +27,11 @@
     "gulp-header": "^1.2.2",
     "gulp-jshint": "1.8.x",
     "gulp-mocha": "1.1.x",
-    "gulp-mox": "0.0.4",
     "gulp-replace": "^0.5.3",
     "gulp-sourcemaps": "1.2.x",
     "gulp-traceur": "0.x.x",
     "jshint-stylish": "1.x.x",
-    "marked-toc": "^0.2.8",
+    "markdown-toc": "^0.11.4",
     "mocha": "1.x.x"
   },
   "dependencies": {

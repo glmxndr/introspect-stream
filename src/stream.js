@@ -25,12 +25,12 @@ const OVERRIDABLE = ['name', 'accept', 'reduce', 'ready', 'extract', 'complete',
  * of the apparatus. If the conditions are right, the apparatus may
  * signal out its output (also asynchronously).
  *
- * @method  Apparatus
- * @param   {Object}  opts  the parameters of the apparatus: overriden methods
- *                          declared in the OVERRIDABLE array, the sources of
- *                          input (other apparati), the optional parent apparatus
- *                          (used for scheduling/priorisation), the initial state.
- * @example
+ * @class Apparatus
+ * @constructor
+ * @category Stream
+ * @param {Object} opts the parameters of the apparatus: overriden methods
+ *   declared in the OVERRIDABLE array, the sources of input (other apparati),
+ *   the optional parent apparatus (used for scheduling/priorisation), the initial state.
  */
 var Apparatus = function (opts = {}) {
   Emitter.call(this);
@@ -51,14 +51,14 @@ var Apparatus = function (opts = {}) {
 
 Apparatus.prototype = _.extend(Emitter.prototype, {
 
-  /*Default overridable behavior components*/
+  // START overridable methods
   _accept: () => true,
   _reduce: (current, ...x) => vals(x),
   _extract: x => x,
   _ready: () => true,
   _complete: () => false,
   _beforeEnd: () => {},
-  /**/
+  // END overridable methods
 
   _later: function (fn) { this._priority.push(fn); },
 
@@ -146,66 +146,72 @@ Apparatus.prototype = _.extend(Emitter.prototype, {
     return new Apparatus(opts);
   },
 
-  map: function (fn) {
-    return this.combine({ reduce: (c,...x) => fn(...x) });
-  },
+  plugin: function (name, fn) {
+    Apparatus.prototype[name] = fn;
+  }
 
-  scan: function (fn, init) {
-    return this.combine({ reduce: fn, init });
-  },
+});
 
-  filter: function (pred) {
-    return this.combine({ accept: pred });
-  },
+var plugin = Apparatus.prototype.plugin;
 
-  merge: function (...os) {
-    return this.combine({endWhen: 'all'}, ...os);
-  },
+plugin('map', function (fn) {
+  return this.combine({ reduce: (c,...x) => fn(...x) });
+});
 
-  combineLatest: function (...os) {
-    os = [this].concat(os);
-    var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
-    var ids = _.pluck(os, 'id');
-    var state = {};
-    return this.combine({
-      endWhen: 'all',
-      init: state,
-      reduce: (state, msg) => (state[msg.id] = msg.value, state),
-      extract: () => ids.reduce( (v, id) => v.push(state[id]), vals() ),
-      parent: this,
-      sources
-    });
-  },
+plugin('scan', function (fn, init) {
+  return this.combine({ reduce: fn, init });
+});
 
-  zip: function (...os) {
-    os = [this].concat(os);
-    var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
-    var ids = _.pluck(os, 'id');
-    var qs = _(os).map(s => [s.id, []]).zipObject().value(); // queues
-    return this.combine({
-      init: qs,
-      ready: () => (ids.every(id => qs[id].length > 0)),
-      reduce: (_, msg) => (qs[msg.id].push(msg.value), qs),
-      extract: () => ids.reduce( (v, id) => v.push(qs[id].shift()), vals() ),
-      parent: this,
-      sources
-    });
-  },
+plugin('filter', function (pred) {
+  return this.combine({ accept: pred });
+});
 
-  bufferWhile: function (pred) {
-    return this.combine({
-      init: [],
-      reduce: function (state, x) { state.push(x); return state; },
-      extract: function (state) { this._state = []; return state; },
-      ready: function (state) { return pred(state); },
-      beforeEnd: function () { this.broadcast(); }
-    });
-  },
+plugin('merge', function (...os) {
+  return this.combine({endWhen: 'all'}, ...os);
+});
 
-  buffer: function (n) {
-    return this.bufferWhile(state => state.length >= n);
-  },
+plugin('combineLatest', function (...os) {
+  os = [this].concat(os);
+  var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
+  var ids = _.pluck(os, 'id');
+  var state = {};
+  return this.combine({
+    endWhen: 'all',
+    init: state,
+    reduce: (state, msg) => (state[msg.id] = msg.value, state),
+    extract: () => ids.reduce( (v, id) => v.push(state[id]), vals() ),
+    parent: this,
+    sources
+  });
+});
 
+plugin('zip', function (...os) {
+  os = [this].concat(os);
+  var sources = os.map(o => o.map(x => ({id: o.id, value: x})));
+  var ids = _.pluck(os, 'id');
+  var qs = _(os).map(s => [s.id, []]).zipObject().value(); // queues
+  return this.combine({
+    init: qs,
+    ready: () => (ids.every(id => qs[id].length > 0)),
+    reduce: (_, msg) => (qs[msg.id].push(msg.value), qs),
+    extract: () => ids.reduce( (v, id) => v.push(qs[id].shift()), vals() ),
+    parent: this,
+    sources
+  });
+});
+
+plugin('bufferWhile', function (pred) {
+  return this.combine({
+    init: [],
+    reduce: function (state, x) { state.push(x); return state; },
+    extract: function (state) { this._state = []; return state; },
+    ready: function (state) { return pred(state); },
+    beforeEnd: function () { this.broadcast(); }
+  });
+});
+
+plugin('buffer', function (n) {
+  return this.bufferWhile(state => state.length >= n);
 });
 
 export var stream = overload(opts => new Apparatus(opts))

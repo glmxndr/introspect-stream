@@ -2,4 +2,4 @@
 
 require('./etc/traceur-runtime');
 
-var stream = require('./lib/node/stream').stream;
+module.exports = require('./lib/node/stream').stream;
